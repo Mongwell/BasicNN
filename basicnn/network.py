@@ -25,9 +25,8 @@ class Network:
 
         acts = [np.array(input_acts)]
         for layer in self._wabs:
-            weights = layer[:, :-1]
-            biases = layer[:, -1]
-            next_acts = sigmoid(weights.dot(acts[-1]) + biases)
+            acts_1col = np.append(acts[-1], 1)
+            next_acts = sigmoid(layer.dot(acts_1col))
             acts.append(next_acts)
 
         return acts
