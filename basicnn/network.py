@@ -94,17 +94,21 @@ class Network:
         return acts
 
     def _d_cost_act(self, layer, idx, expected_out, acts):
+        # Base case, partial deriv for activation in last layer
         if layer == self.num_act_layers - 1:
             return 2 * (acts[layer][idx] - expected_out[idx])
 
-            # j = 0, 1, ... (length next layer)
+        # Need to add up effect of this activation on all activations in next layer
         accum_partial_cost_act = 0
         for out_neur in range(0, len(acts[layer + 1])):
             partial_cost_act = self._d_cost_act(layer + 1, out_neur, expected_out, acts)
 
+            # Next activation layer's weights (layer + 1) are in _wabs[layer+1-1] since
+            # layers of matrices is one less than activation layers
             sum = self._wabs[layer][out_neur].dot(np.append(acts[layer], 1))
             partial_act_sum = d_sigmoid(sum)
 
+            # Same note above applies here.
             partial_sum_act = self._wabs[layer][out_neur, idx]
 
             accum_partial_cost_act += partial_cost_act * partial_act_sum * partial_sum_act
@@ -131,22 +135,20 @@ class Network:
         # TODO: add check with DimensionError for len(example) == self.input_layer_size
         grad_single = [np.zeros(np.shape(layer)) for layer in self._wabs]
 
-        # [0, 0, ..., 1, 0, 0 ...], 1 at label index
+        # Ideal output activations should be 1 at label index, 0 otherwise
         expected_out = [0] * self.output_layer_size
         expected_out[label] = 1
 
         acts = self.feedforward(example)
 
-        # edge matrices
+        # Iterate backwards through layers over each weight and bias
         for layer in reversed(range(0, len(grad_single))):
-            # row in matrix
             layer_shape = np.shape(grad_single[layer])
             for out_neur in range(0, layer_shape[0]):
-                # col in matrix (last col is biases)
-                for in_neur in range(0, layer_shape[1] - 1):
-                    change = self._d_cost_weight(
+                for in_neur in range(0, layer_shape[1] - 1):  # last col is biases
+                    partial_cost_weight = self._d_cost_weight(
                         layer, out_neur, in_neur, expected_out, acts)
-                    grad_single[layer][out_neur, in_neur] += change
+                    grad_single[layer][out_neur, in_neur] += partial_cost_weight
 
                 grad_single[layer][out_neur, -1] = self._d_cost_bias(
                     layer, out_neur, expected_out, acts)
