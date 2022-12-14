@@ -155,9 +155,6 @@ class Network:
 
         return grad_single
 
-    # assume train_batch is np array of shape (num samples, input_layer_size)
-    # assume train_labels is an (np) array of shape (num samples, )
-    # assume len(train_batch) == len(train_labels)
     def backprop(self, train_batch, train_labels):
         """
         Run backpropagation algorithm on a batch of input data.
@@ -181,7 +178,6 @@ class Network:
             for layer in range(0, len(grad)):
                 grad[layer] += grad_single[layer]
 
+        # Average change to cost over batch and apply gradient descent
         for layer in range(0, len(grad)):
-            # Average change to cost over all examples and
-            # apply gradient descent
             self._wabs[layer] -= grad[layer] / len(train_labels)
