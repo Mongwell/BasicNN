@@ -7,7 +7,7 @@ import numpy as np
 
 def sigmoid(x):
     """Math sigmoid function for normalizing activations."""
-    return 1.0/(1.0 + np.exp(-x))
+    return 1.0 / (1.0 + np.exp(-x))
 
 
 def d_sigmoid(x):
@@ -29,8 +29,7 @@ class DimensionError(Exception):
             dim_b -- (string) name of second dimension
             val_b -- value of second dimension
         """
-        message = "Dimension {} ({}) should match dimension {} ({})."
-        message.format(dim_a, val_a, dim_b, val_b)
+        message = f"Dimension {dim_a} ({val_a}) should match dimension {dim_b} ({val_b})."
         super().__init__(message)
 
 
@@ -80,10 +79,13 @@ class Network:
         Arguments:
             input_acts -- input data for the network
         """
-        # TODO: replace this error with a DimensionError
         if len(input_acts) != self.input_layer_size:
-            err = "Input activations should match input layer size of "
-            raise ValueError(err + str(self.input_layer_size))
+            raise DimensionError(
+                "len(input_acts)",
+                len(input_acts),
+                "self.input_layer_size",
+                self.input_layer_size,
+            )
 
         acts = [np.array(input_acts)]
         for layer in self._wabs:
@@ -132,7 +134,10 @@ class Network:
         return partial_cost_act * partial_act_sum * partial_sum_bias
 
     def _compute_grad_single(self, example, label):
-        # TODO: add check with DimensionError for len(example) == self.input_layer_size
+        if len(example) != self.input_layer_size:
+            raise DimensionError(
+                "len(example)", len(example), "self.input_layer_size", self.input_layer_size
+            )
         grad_single = [np.zeros(np.shape(layer)) for layer in self._wabs]
 
         # Ideal output activations should be 1 at label index, 0 otherwise
@@ -147,11 +152,13 @@ class Network:
             for out_neur in range(0, layer_shape[0]):
                 for in_neur in range(0, layer_shape[1] - 1):  # last col is biases
                     partial_cost_weight = self._d_cost_weight(
-                        layer, out_neur, in_neur, expected_out, acts)
+                        layer, out_neur, in_neur, expected_out, acts
+                    )
                     grad_single[layer][out_neur, in_neur] += partial_cost_weight
 
                 grad_single[layer][out_neur, -1] = self._d_cost_bias(
-                    layer, out_neur, expected_out, acts)
+                    layer, out_neur, expected_out, acts
+                )
 
         return grad_single
 
@@ -168,7 +175,10 @@ class Network:
 
         Lengths of train_batch and train_labels must match
         """
-        # TODO: add check with DimensionError for train_batch and train_labels lengths
+        if len(train_batch) != len(train_labels):
+            raise DimensionError(
+                "len(train_batch)", len(train_batch), "len(train_labels)", len(train_labels)
+            )
         grad = [np.zeros(np.shape(layer)) for layer in self._wabs]
 
         # iterate over batch
