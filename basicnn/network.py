@@ -71,6 +71,31 @@ class Network:
 
         return partial_cost_act * partial_act_sum * partial_sum_bias
 
+    def _compute_grad_single(self, example, label):
+        grad_single = [np.zeros(np.shape(layer)) for layer in self._wabs]
+
+        # [0, 0, ..., 1, 0, 0 ...], 1 at label index
+        expected_out = [0] * self.output_layer_size
+        expected_out[label] = 1
+
+        acts = self.feedforward(example)
+
+        # edge matrices
+        for layer in reversed(range(0, len(grad_single))):
+            # row in matrix
+            layer_shape = np.shape(grad_single[layer])
+            for out_neur in range(0, layer_shape[0]):
+                # col in matrix (last col is biases)
+                for in_neur in range(0, layer_shape[1] - 1):
+                    change = self._d_cost_weight(
+                        layer, out_neur, in_neur, expected_out, acts)
+                    grad_single[layer][out_neur, in_neur] += change
+
+                grad_single[layer][out_neur, -1] = self._d_cost_bias(
+                    layer, out_neur, expected_out, acts)
+
+        return grad_single
+
     # assume train_batch is np array of shape (num samples, input_layer_size)
     # assume train_labels is an (np) array of shape (num samples, )
     # assume len(train_batch) == len(train_labels)
@@ -78,26 +103,11 @@ class Network:
         grad = [np.zeros(np.shape(layer)) for layer in self._wabs]
 
         # iterate over batch
-        for i in range(len(train_labels)):
-            # [0, 0, ..., 1, 0, 0 ...], 1 at label index
-            expected_out = [0] * self.output_layer_size
-            expected_out[train_labels[i]] = 1
+        for (example, label) in zip(train_batch, train_labels):
+            grad_single = self._compute_grad_single(example, label)
 
-            acts = self.feedforward(train_batch[i])
-
-            # edge matrices
-            for layer in reversed(range(0, len(grad))):
-                # row in matrix
-                layer_shape = np.shape(grad[layer])
-                for out_neur in range(0, layer_shape[0]):
-                    # col in matrix (last col is biases)
-                    for in_neur in range(0, layer_shape[1] - 1):
-                        change = self._d_cost_weight(
-                            layer, out_neur, in_neur, expected_out, acts)
-                        grad[layer][out_neur, in_neur] += change
-
-                    grad[layer][out_neur, -1] = self._d_cost_bias(
-                        layer, out_neur, expected_out, acts)
+            for layer in range(0, len(grad)):
+                grad[layer] += grad_single[layer]
 
         for layer in range(0, len(grad)):
             # Average change to cost over all examples and
