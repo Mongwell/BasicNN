@@ -1,6 +1,7 @@
 """Library for creating simple feed forward neural networks."""
 
 import numpy as np
+import random
 
 # Math Functions
 
@@ -191,3 +192,108 @@ class Network:
         # Average change to cost over batch and apply gradient descent
         for layer in range(0, len(grad)):
             self._wabs[layer] -= grad[layer] / len(train_labels)
+
+
+class ClassificationModel:
+    """
+    Wrapper/abstraction to use Network object as a (image) classifier.
+
+    Attributes:
+        _n -- Network that will be used during training, testing, and/or inference
+        class_names -- list of strings to use when making classifications
+    """
+
+    def __init__(self, nn, class_names):
+        """
+        Construct model with a network and class labels.
+
+        Arguments:
+            nn -- Network to use
+            classes -- array of string names for output labels. Must have same
+                length as output layer of nn.
+        """
+        if nn.output_layer_size != len(class_names):
+            raise DimensionError(
+                "nn.output_layer_size", nn.output_layer_size, "len(class_names)", len(class_names)
+            )
+
+        self._n = nn
+        self.class_names = class_names
+
+    def train(self, dataset, labels, batch_size, epochs):
+        """
+        Train the network on a dataset.
+
+        Shuffle the data each epoch, and split into new batches before running backpropagation
+
+        Arguments:
+            dataset -- full dataset to train on as a 2d array
+            labels -- integer list of labels for each example in the dataset
+            batch_size -- size of each batch that the dataset will be split into. backpropagation
+                will run on 1 batch instead of the entire dataset
+            epochs -- number of training passes through this entire dataset
+        """
+        dset_shape = np.shape(dataset)
+        if dset_shape[0] != len(labels):
+            raise DimensionError("len(dataset)", dset_shape[0], "len(labels)", len(labels))
+        if dset_shape[1] != self._n.input_layer_size:
+            raise DimensionError(
+                "np.shape(dataset)[1]",
+                dset_shape[1],
+                "_n.input_layer_size",
+                self._n.input_layer_size,
+            )
+
+        labeled_dset = list(zip(dataset, labels))
+        for _ in range(0, epochs):
+            random.shuffle(labeled_dset)
+
+            for batch_start in range(0, dset_shape[0], batch_size):
+                batch = labeled_dset[batch_start: batch_start + batch_size]
+                (batch_train, batch_labels) = zip(*batch)
+                batch_train = np.array(batch_train)
+                batch_labels = np.array(batch_labels)
+                self._n.backprop(batch_train, batch_labels)
+
+    def test(self, dataset, labels):
+        """
+        Test the accuracy of the network.
+
+        Arguments:
+            dataset -- dataset to test on as a 2d array
+            labels -- integer list of labels for each examples in the dataset
+        """
+        dset_shape = np.shape(dataset)
+        if dset_shape[0] != len(labels):
+            raise DimensionError("len(dataset)", dset_shape[0], "len(labels)", len(labels))
+        if dset_shape[1] != self._n.input_layer_size:
+            raise DimensionError(
+                "np.shape(dataset)[1]",
+                dset_shape[1],
+                "_n.input_layer_size",
+                self._n.input_layer_size,
+            )
+
+        correct = 0
+        for example, label in zip(dataset, labels):
+            prediction = self._n.feedforward(example)[-1].argmax()
+            if prediction == label:
+                correct += 1
+
+        accuracy = correct / dset_shape[0]
+        return accuracy
+
+    def infer(self, data):
+        """
+        Predict the class of a single piece of data.
+
+        Arguments:
+            data -- data to classify as vector of input activations
+        """
+        if len(data) != self._n.input_layer_size:
+            raise DimensionError(
+                "len(data)", len(data), "_n.input_layer_size", self._n.input_layer_size
+            )
+
+        prediction = self._n.feedforward(data)[-1].argmax()
+        return (prediction, self.class_names[prediction])
