@@ -106,7 +106,7 @@ class Network:
             raise DimensionError(
                 "len(example)", len(example), "self.input_layer_size", self.input_layer_size
             )
-        grad_single = [np.zeros(np.shape(layer)) for layer in self._wabs]
+        grad_single = [np.zeros(layer.shape) for layer in self._wabs]
 
         # Ideal output activations should be 1 at label index, 0 otherwise
         expected_out = [0] * self.output_layer_size
@@ -151,7 +151,7 @@ class Network:
             raise DimensionError(
                 "len(train_batch)", len(train_batch), "len(train_labels)", len(train_labels)
             )
-        grad = [np.zeros(np.shape(layer)) for layer in self._wabs]
+        grad = [np.zeros(layer.shape) for layer in self._wabs]
 
         # iterate over batch
         for (example, label) in zip(train_batch, train_labels):
@@ -204,12 +204,12 @@ class ClassificationModel:
                 will run on 1 batch instead of the entire dataset
             epochs -- number of training passes through this entire dataset
         """
-        dset_shape = np.shape(dataset)
+        dset_shape = dataset.shape
         if dset_shape[0] != len(labels):
             raise DimensionError("len(dataset)", dset_shape[0], "len(labels)", len(labels))
         if dset_shape[1] != self._n.input_layer_size:
             raise DimensionError(
-                "np.shape(dataset)[1]",
+                "dataset.shape[1]",
                 dset_shape[1],
                 "_n.input_layer_size",
                 self._n.input_layer_size,
@@ -234,12 +234,12 @@ class ClassificationModel:
             dataset -- dataset to test on as a 2d array
             labels -- integer list of labels for each examples in the dataset
         """
-        dset_shape = np.shape(dataset)
+        dset_shape = dataset.shape
         if dset_shape[0] != len(labels):
             raise DimensionError("len(dataset)", dset_shape[0], "len(labels)", len(labels))
         if dset_shape[1] != self._n.input_layer_size:
             raise DimensionError(
-                "np.shape(dataset)[1]",
+                "dataset.shape[1]",
                 dset_shape[1],
                 "_n.input_layer_size",
                 self._n.input_layer_size,
