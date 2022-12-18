@@ -89,46 +89,53 @@ class Network:
             )
 
         acts = [np.array(input_acts)]
+        sums = [np.array(input_acts)]
         for layer in self._wabs:
             acts_1 = np.append(acts[-1], 1)  # Allows bias addition to be part of mat-vec mult
-            next_acts = sigmoid(layer.dot(acts_1))
+
+            sum = layer.dot(acts_1)
+            sums.append(sum)
+
+            next_acts = sigmoid(sum)
             acts.append(next_acts)
 
-        return acts
+        return acts, sums
 
-    def _d_cost_act(self, layer, idx, expected_out, acts):
+    def _d_cost_acts(self, acts, sums, expected_out):
+        cost_act_partials = [np.zeros(np.shape(layer)) for layer in acts]
+
         # Base case, partial deriv for activation in last layer
-        if layer == self.num_act_layers - 1:
-            return 2 * (acts[layer][idx] - expected_out[idx])
+        last_layer = 2 * (acts[-1] - expected_out)
+        cost_act_partials[-1] = np.array(last_layer)
 
-        # Need to add up effect of this activation on all activations in next layer
-        accum_partial_cost_act = 0
-        for out_neur in range(0, len(acts[layer + 1])):
-            partial_cost_act = self._d_cost_act(layer + 1, out_neur, expected_out, acts)
+        # iterate backwards through hidden layers
+        for layer in reversed(range(1, len(cost_act_partials) - 1)):
+            for in_neur in range(0, len(acts[layer])):
+                accum_partial_cost_act = 0
+                for out_neur in range(0, len(acts[layer+1])):
+                    partial_cost_act = cost_act_partials[layer+1][out_neur]
+                    partial_act_sum = d_sigmoid(sums[layer+1][out_neur])
 
-            # Next activation layer's weights (layer + 1) are in _wabs[layer+1-1] since
-            # layers of matrices is one less than activation layers
-            sum = self._wabs[layer][out_neur].dot(np.append(acts[layer], 1))
-            partial_act_sum = d_sigmoid(sum)
+                    # Next activation layer's weights (layer + 1) are in _wabs[layer+1-1] since
+                    # layers of matrices is one less than activation layers
+                    partial_sum_act = self._wabs[layer][out_neur][in_neur]
 
-            # Same note above applies here.
-            partial_sum_act = self._wabs[layer][out_neur, idx]
+                    accum_partial_cost_act += partial_cost_act * partial_act_sum * partial_sum_act
 
-            accum_partial_cost_act += partial_cost_act * partial_act_sum * partial_sum_act
+                cost_act_partials[layer][in_neur] = accum_partial_cost_act
 
-        return accum_partial_cost_act
+        return cost_act_partials
 
-    def _d_cost_weight(self, layer, out_neur, in_neur, expected_out, acts):
+    def _d_cost_weight(self, layer, out_neur, in_neur, acts, sums, cost_act_partials):
         partial_sum_weight = acts[layer][in_neur]
-        partial_cost_sum = self._d_cost_bias(layer, out_neur, expected_out, acts)
+        partial_cost_sum = self._d_cost_bias(layer, out_neur, acts, sums, cost_act_partials)
 
         return partial_cost_sum * partial_sum_weight
 
-    def _d_cost_bias(self, layer, out_neur, expected_out, acts):
-        partial_cost_act = self._d_cost_act(layer + 1, out_neur, expected_out, acts)
+    def _d_cost_bias(self, layer, out_neur, acts, sums, cost_act_partials):
+        partial_cost_act = cost_act_partials[layer + 1][out_neur]
 
-        sum = self._wabs[layer][out_neur].dot(np.append(acts[layer], 1))
-        partial_act_sum = d_sigmoid(sum)
+        partial_act_sum = d_sigmoid(sums[layer + 1][out_neur])
 
         partial_sum_bias = 1
 
@@ -145,7 +152,8 @@ class Network:
         expected_out = [0] * self.output_layer_size
         expected_out[label] = 1
 
-        acts = self.feedforward(example)
+        (acts, sums) = self.feedforward(example)
+        cost_act_partials = self._d_cost_acts(acts, sums, expected_out)
 
         # Iterate backwards through layers over each weight and bias
         for layer in reversed(range(0, len(grad_single))):
@@ -153,12 +161,12 @@ class Network:
             for out_neur in range(0, layer_shape[0]):
                 for in_neur in range(0, layer_shape[1] - 1):  # last col is biases
                     partial_cost_weight = self._d_cost_weight(
-                        layer, out_neur, in_neur, expected_out, acts
+                        layer, out_neur, in_neur, acts, sums, cost_act_partials
                     )
                     grad_single[layer][out_neur, in_neur] += partial_cost_weight
 
                 grad_single[layer][out_neur, -1] = self._d_cost_bias(
-                    layer, out_neur, expected_out, acts
+                    layer, out_neur, acts, sums, cost_act_partials
                 )
 
         return grad_single
@@ -276,7 +284,7 @@ class ClassificationModel:
 
         correct = 0
         for example, label in zip(dataset, labels):
-            prediction = self._n.feedforward(example)[-1].argmax()
+            prediction = self._n.feedforward(example)[0][-1].argmax()
             if prediction == label:
                 correct += 1
 
@@ -295,5 +303,5 @@ class ClassificationModel:
                 "len(data)", len(data), "_n.input_layer_size", self._n.input_layer_size
             )
 
-        prediction = self._n.feedforward(data)[-1].argmax()
+        prediction = self._n.feedforward(data)[0][-1].argmax()
         return (prediction, self.class_names[prediction])
