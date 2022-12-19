@@ -150,8 +150,7 @@ class Network:
             cost_bias_partials = np.multiply(cost_act_partials, act_sum_partials)
             b1_row = np.ones((1, acts[layer].shape[1]))
             acts_1 = np.append(acts[layer], b1_row, axis=0)
-            for i in range(len(train_labels)):
-                grad_batch[layer][i] = np.outer(cost_bias_partials[:, i], acts_1[:, i])
+            grad_batch[layer] = np.einsum('ij,ih->ijh', cost_bias_partials.T, acts_1.T)
 
             # d cost / d act
             cost_act_partials = self._wabs[layer].transpose()[:-1].dot(cost_bias_partials)
