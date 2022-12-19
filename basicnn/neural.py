@@ -1,7 +1,6 @@
 """Library for creating simple feed forward neural networks."""
 
 import numpy as np
-import random
 
 # Math Functions
 
@@ -214,7 +213,7 @@ class ClassificationModel:
 
         labeled_dset = list(zip(dataset, labels))
         for _ in range(0, epochs):
-            random.shuffle(labeled_dset)  # TODO: change to np.random
+            np.random.shuffle(labeled_dset)
 
             for batch_start in range(0, dset_shape[0], batch_size):
                 batch = labeled_dset[batch_start: batch_start + batch_size]
