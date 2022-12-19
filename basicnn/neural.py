@@ -73,17 +73,17 @@ class Network:
 
     def feedforward(self, input_acts):
         """
-        Forward pass through the network.
+        Forward pass through the network on a batch of inputs.
 
-        Returns all activations (including input data)
+        Returns all activations (including input data) and weighted sums (without normalization)
 
         Arguments:
-            input_acts -- input data for the network
+            input_acts -- must be a 2d array where columns are input data for the network
         """
-        if len(input_acts) != self.input_layer_size:
+        if input_acts.shape[0] != self.input_layer_size:
             raise DimensionError(
-                "len(input_acts)",
-                len(input_acts),
+                "input_acts.shape[0]",
+                input_acts.shape[0],
                 "self.input_layer_size",
                 self.input_layer_size,
             )
@@ -91,7 +91,9 @@ class Network:
         acts = [np.array(input_acts)]
         sums = [np.array(input_acts)]
         for layer in self._wabs:
-            acts_1 = np.append(acts[-1], 1)  # Allows bias addition to be part of mat-vec mult
+            # Allows bias addition to be part of mat-vec mult
+            b1_row = np.ones((1, acts[-1].shape[1]))
+            acts_1 = np.append(acts[-1], b1_row, axis=0)
 
             sum = layer.dot(acts_1)
             sums.append(sum)
@@ -101,68 +103,63 @@ class Network:
 
         return acts, sums
 
-    def _compute_grad_single(self, example, label):
-        if len(example) != self.input_layer_size:
-            raise DimensionError(
-                "len(example)", len(example), "self.input_layer_size", self.input_layer_size
-            )
-        grad_single = [np.zeros(layer.shape) for layer in self._wabs]
-
-        # Ideal output activations should be 1 at label index, 0 otherwise
-        expected_out = [0] * self.output_layer_size
-        expected_out[label] = 1
-
-        (acts, sums) = self.feedforward(example)
-
-        # Base case, partial deriv for activation in last layer
-        last_layer = 2 * (acts[-1] - expected_out)
-        cost_act_partials = np.array(last_layer)
-
-        # Iterate backwards through layers. Grad layers = Acts layers - 1.
-        # Last layer of act partials already calculated, so each layer of
-        # wabs matches with its corresponding input acts
-        for layer in reversed(range(0, len(grad_single))):
-            act_sum_partials = d_sigmoid(sums[layer + 1])
-
-            # d cost / d biases and d cost / d weights
-            cost_bias_partials = np.multiply(cost_act_partials, act_sum_partials)
-            acts_1 = np.append(acts[layer], 1)
-            grad_single[layer] = np.outer(cost_bias_partials, acts_1)
-
-            # d cost / d act
-            cost_act_partials = self._wabs[layer].transpose()[:-1].dot(cost_bias_partials)
-
-        return grad_single
-
     def backprop(self, train_batch, train_labels):
         """
         Run backpropagation algorithm on a batch of input data.
 
-        Computes individual gradients (partial derivatives for each weight and bias) for each
-        example, then takes averages over batch. Updates weights and biases once.
+        Computes gradients (partial derivatives for each weight and bias),
+        then takes averages over batch. Updates weights and biases once.
 
         Arguments:
-            train_batch -- array of input data
+            train_batch -- array of input data where each example is a column
             train_labels -- array of labels for input data
 
-        Lengths of train_batch and train_labels must match
+        Number of examples in train_batch must match length of train_labels
         """
-        if len(train_batch) != len(train_labels):
+        if train_batch.shape[1] != len(train_labels):
             raise DimensionError(
-                "len(train_batch)", len(train_batch), "len(train_labels)", len(train_labels)
+                "train_batch.shape[1]", train_batch.shape[1], "len(train_labels)", len(train_labels)
             )
-        grad = [np.zeros(layer.shape) for layer in self._wabs]
+        if train_batch.shape[0] != self.input_layer_size:
+            raise DimensionError(
+                "train_batch.shape[0]",
+                train_batch.shape[0],
+                "self.input_layer_size",
+                self.input_layer_size,
+            )
 
-        # iterate over batch
-        for (example, label) in zip(train_batch, train_labels):
-            grad_single = self._compute_grad_single(example, label)
+        grad_batch = [np.zeros(((len(train_labels),) + layer.shape)) for layer in self._wabs]
 
-            for layer in range(0, len(grad)):
-                grad[layer] += grad_single[layer]
+        # Ideal output activations should be 1 at label index, 0 otherwise
+        expected_outs = np.zeros((self.output_layer_size, len(train_labels)))
+        for i in range(len(train_labels)):
+            label = train_labels[i]
+            expected_outs[label][i] = 1
+
+        (acts, sums) = self.feedforward(train_batch)
+
+        # Base case, partial deriv for activation in last layer
+        cost_act_partials = 2 * (acts[-1] - expected_outs)
+
+        # Iterate backwards through layers. Grad layers = Acts layers - 1.
+        # Last layer of act partials already calculated, so each layer of
+        # wabs matches with its corresponding input acts
+        for layer in reversed(range(0, len(grad_batch))):
+            act_sum_partials = d_sigmoid(sums[layer + 1])
+
+            # d cost / d biases and d cost / d weights
+            cost_bias_partials = np.multiply(cost_act_partials, act_sum_partials)
+            b1_row = np.ones((1, acts[layer].shape[1]))
+            acts_1 = np.append(acts[layer], b1_row, axis=0)
+            for i in range(len(train_labels)):
+                grad_batch[layer][i] = np.outer(cost_bias_partials[:, i], acts_1[:, i])
+
+            # d cost / d act
+            cost_act_partials = self._wabs[layer].transpose()[:-1].dot(cost_bias_partials)
 
         # Average change to cost over batch and apply gradient descent
-        for layer in range(0, len(grad)):
-            self._wabs[layer] -= grad[layer] / len(train_labels)
+        for layer in range(0, len(grad_batch)):
+            self._wabs[layer] -= np.average(grad_batch[layer], axis=0)
 
 
 class ClassificationModel:
@@ -217,12 +214,12 @@ class ClassificationModel:
 
         labeled_dset = list(zip(dataset, labels))
         for _ in range(0, epochs):
-            random.shuffle(labeled_dset)
+            random.shuffle(labeled_dset)  # TODO: change to np.random
 
             for batch_start in range(0, dset_shape[0], batch_size):
                 batch = labeled_dset[batch_start: batch_start + batch_size]
                 (batch_train, batch_labels) = zip(*batch)
-                batch_train = np.array(batch_train)
+                batch_train = np.array(batch_train).transpose()
                 batch_labels = np.array(batch_labels)
                 self._n.backprop(batch_train, batch_labels)
 
@@ -246,11 +243,8 @@ class ClassificationModel:
             )
 
         correct = 0
-        for example, label in zip(dataset, labels):
-            prediction = self._n.feedforward(example)[0][-1].argmax()
-            if prediction == label:
-                correct += 1
-
+        predictions = self._n.feedforward(dataset.transpose())[0][-1].argmax(axis=0)
+        correct = (predictions == labels).sum()
         accuracy = correct / dset_shape[0]
         return accuracy
 
@@ -266,5 +260,6 @@ class ClassificationModel:
                 "len(data)", len(data), "_n.input_layer_size", self._n.input_layer_size
             )
 
-        prediction = self._n.feedforward(data)[0][-1].argmax()
+        data_col = np.array([data]).transpose()
+        prediction = self._n.feedforward(data_col)[0][-1].argmax()
         return (prediction, self.class_names[prediction])
