@@ -127,8 +127,6 @@ class Network:
                 self.input_layer_size,
             )
 
-        grad_batch = [np.zeros(((len(train_labels),) + layer.shape)) for layer in self._wabs]
-
         # Ideal output activations should be 1 at label index, 0 otherwise
         expected_outs = np.zeros((self.output_layer_size, len(train_labels)))
         for i in range(len(train_labels)):
@@ -143,21 +141,20 @@ class Network:
         # Iterate backwards through layers. Grad layers = Acts layers - 1.
         # Last layer of act partials already calculated, so each layer of
         # wabs matches with its corresponding input acts
-        for layer in reversed(range(0, len(grad_batch))):
+        for layer in reversed(range(0, len(self._wabs))):
             act_sum_partials = d_sigmoid(sums[layer + 1])
 
             # d cost / d biases and d cost / d weights
             cost_bias_partials = np.multiply(cost_act_partials, act_sum_partials)
             b1_row = np.ones((1, acts[layer].shape[1]))
             acts_1 = np.append(acts[layer], b1_row, axis=0)
-            grad_batch[layer] = np.einsum('ij,ih->ijh', cost_bias_partials.T, acts_1.T)
+            self._wabs[layer] -= np.average(
+                np.einsum("ij,ih->ijh", cost_bias_partials.T, acts_1.T), axis=0
+            )
 
-            # d cost / d act
-            cost_act_partials = self._wabs[layer].T[:-1].dot(cost_bias_partials)
-
-        # Average change to cost over batch and apply gradient descent
-        for layer in range(0, len(grad_batch)):
-            self._wabs[layer] -= np.average(grad_batch[layer], axis=0)
+            if layer != 0:
+                # d cost / d act
+                cost_act_partials = self._wabs[layer].T[:-1].dot(cost_bias_partials)
 
 
 class ClassificationModel:
