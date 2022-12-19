@@ -153,7 +153,7 @@ class Network:
             grad_batch[layer] = np.einsum('ij,ih->ijh', cost_bias_partials.T, acts_1.T)
 
             # d cost / d act
-            cost_act_partials = self._wabs[layer].transpose()[:-1].dot(cost_bias_partials)
+            cost_act_partials = self._wabs[layer].T[:-1].dot(cost_bias_partials)
 
         # Average change to cost over batch and apply gradient descent
         for layer in range(0, len(grad_batch)):
@@ -217,7 +217,7 @@ class ClassificationModel:
             for batch_start in range(0, dset_shape[0], batch_size):
                 batch = labeled_dset[batch_start: batch_start + batch_size]
                 (batch_train, batch_labels) = zip(*batch)
-                batch_train = np.array(batch_train).transpose()
+                batch_train = np.array(batch_train).T
                 batch_labels = np.array(batch_labels)
                 self._n.backprop(batch_train, batch_labels)
 
@@ -241,7 +241,7 @@ class ClassificationModel:
             )
 
         correct = 0
-        predictions = self._n.feedforward(dataset.transpose())[0][-1].argmax(axis=0)
+        predictions = self._n.feedforward(dataset.T)[0][-1].argmax(axis=0)
         correct = (predictions == labels).sum()
         accuracy = correct / dset_shape[0]
         return accuracy
@@ -258,6 +258,6 @@ class ClassificationModel:
                 "len(data)", len(data), "_n.input_layer_size", self._n.input_layer_size
             )
 
-        data_col = np.array([data]).transpose()
+        data_col = np.array([data]).T
         prediction = self._n.feedforward(data_col)[0][-1].argmax()
         return (prediction, self.class_names[prediction])
